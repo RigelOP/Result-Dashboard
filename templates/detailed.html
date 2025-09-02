@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detailed Subject Info</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/feather-icons"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body{font-family:'Poppins',sans-serif;background:#f8fafc}</style>
+</head>
+<body class="min-h-screen">
+  <div class="max-w-6xl mx-auto py-10 px-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Subject form -->
+      <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow">
+        <h1 class="text-2xl font-semibold text-gray-800">Provide Subject Names & Total Marks</h1>
+        <p class="text-sm text-gray-500 mt-1">Fill subject full names and total marks so final export includes readable columns.</p>
+
+        <form action="/detailed/submit" method="post" class="mt-6 space-y-4">
+          {% for code in subjects %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center p-3 rounded border">
+              <div class="md:col-span-1 font-medium text-gray-700">{{ code }}</div>
+              <div class="md:col-span-1">
+                <input type="text" name="code_{{ code }}" placeholder="Full subject name" class="w-full px-3 py-2 border rounded" />
+              </div>
+              <div class="md:col-span-1">
+                <input type="number" name="total_{{ code }}" placeholder="Total marks" class="w-full px-3 py-2 border rounded" />
+              </div>
+            </div>
+          {% endfor %}
+
+          <div class="flex items-center justify-between">
+            <a href="/" class="text-indigo-600 hover:underline">Back to dashboard</a>
+            <button type="submit" class="px-5 py-2 bg-indigo-600 text-white rounded">Save & Continue</button>
+          </div>
+        </form>
+      </div>
+
+  <!-- (Removed failed students panel as requested) -->
+    </div>
+  </div>
+
+  <script>
+    feather.replace();
+
+  // No failed-students UI on this page anymore
+  window.onload = () => { feather.replace(); };
+  </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Detailed Analysis</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-sans">
+  <div class="max-w-4xl mx-auto py-10 px-4">
+    <div class="bg-white p-6 rounded shadow">
+      <h1 class="text-2xl font-semibold">Grade Distribution</h1>
+      <p class="text-sm text-gray-500">Summary of grade ranges per subject.</p>
+
+      <div class="mt-6 overflow-auto">
+        <table class="min-w-full table-auto border-collapse">
+          <thead>
+            <tr class="bg-gray-100 text-left">
+              {% for col in columns %}
+                <th class="px-4 py-2 border">{{ col }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr class="odd:bg-white even:bg-gray-50">
+                {% for col in columns %}
+                  <td class="px-4 py-2 border text-sm">{{ row.get(col, '') }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-4">
+        <a id="download-link" href="/download-results" class="px-4 py-2 bg-indigo-600 text-white rounded">Download Excel</a>
+        <a href="/progress" class="px-4 py-2 bg-white border rounded">Back</a>
+        <div id="download-timer" class="mt-2 hidden">
+          <div class="w-full bg-gray-200 rounded h-2 overflow-hidden mb-1" style="height:8px">
+            <div id="expiry-bar" style="width:100%; height:100%; background:#4f46e5; transition: width 1s linear, background 0.5s"></div>
+          </div>
+          <p class="text-sm text-gray-500">Available for <span id="timer-mmss">--:--</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    function formatMMSS(secs){
+      const m = Math.floor(secs/60).toString().padStart(2,'0');
+      const s = Math.floor(secs%60).toString().padStart(2,'0');
+      return `${m}:${s}`;
+    }
+    async function initTimer(){
+      try{
+        const res = await fetch('/status');
+        const data = await res.json();
+        if(data.result_expires_at){
+          const tm = document.getElementById('download-timer');
+          const label = document.getElementById('timer-mmss');
+          const bar = document.getElementById('expiry-bar');
+          const dlBtn = document.getElementById('download-link');
+          let expiresAt = parseInt(data.result_expires_at, 10);
+          tm.classList.remove('hidden');
+          function tick(){
+            const now = Math.floor(Date.now()/1000);
+            let remaining = Math.max(0, expiresAt - now);
+            label.textContent = formatMMSS(remaining);
+            const ttl = 20*60;
+            const pct = Math.max(0, Math.min(100, Math.round((remaining/ttl)*100)));
+            bar.style.width = pct + '%';
+            if(pct > 50) bar.style.background = '#10b981'; else if(pct > 20) bar.style.background = '#f59e0b'; else bar.style.background = '#ef4444';
+            if(remaining <= 0){
+              tm.textContent = 'The file should be removed shortly.';
+              dlBtn.classList.add('hidden');
+              clearInterval(window._analysisTimerInterval);
+            }
+          }
+          tick();
+          window._analysisTimerInterval = setInterval(tick, 1000);
+          // availability re-check
+          window._analysisRefreshInterval = setInterval(async ()=>{
+            try{
+              const r = await fetch('/status');
+              const j = await r.json();
+              if(!j.result_file){
+                dlBtn.classList.add('hidden');
+                tm.classList.add('hidden');
+                clearInterval(window._analysisRefreshInterval);
+              }
+            }catch(e){}
+          }, 10000);
+        }
+      }catch(e){/* ignore */}
+    }
+    initTimer();
+  </script>
+</body>
+</html>

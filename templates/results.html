@@ -1,0 +1,265 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Results Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Poppins', sans-serif; background-color: #f8fafc }
+    .sheet-tab { padding: 8px 16px; border: 1px solid #e2e8f0; border-bottom: none; border-radius: 4px 4px 0 0; margin-right: 4px; cursor: pointer; background-color: #f1f5f9 }
+    .sheet-tab.active { background-color: white; border-bottom: 1px solid white; margin-bottom: -1px; font-weight: 500; color: #4f46e5 }
+    table { border-collapse: collapse; width: 100% }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left }
+    th { background-color: #f1f5f9; font-weight: 500 }
+    tr:nth-child(even) { background-color: #f8fafc }
+    .small { font-size: .85rem }
+  .h-scroll { height: 12px; overflow-x: auto; overflow-y: hidden; }
+  .h-scroll > div { height: 1px; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+  <div class="container mx-auto px-4 py-8 max-w-7xl">
+    <div class="bg-white rounded-xl shadow-xl overflow-hidden">
+      <div class="bg-indigo-600 py-4 px-6 flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-bold text-white">Results Viewer</h1>
+          <p class="text-indigo-100">Preview of extracted results</p>
+        </div>
+        <div class="flex items-center space-x-3">
+          <button id="downloadBtn" class="px-4 py-2 bg-white text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors flex items-center">
+            <i data-feather="download" class="w-4 h-4 mr-2"></i>
+            Download XLS
+          </button>
+        </div>
+      </div>
+      <div class="p-4 pl-6">
+        <div id="download-timer" class="hidden">
+          <div class="w-full bg-gray-200 rounded h-2 overflow-hidden mb-1" style="height:8px">
+            <div id="expiry-bar" style="width:100%; height:100%; background:#4f46e5; transition: width 1s linear, background 0.5s"></div>
+          </div>
+          <p id="download-timer-text" class="text-sm text-gray-500">Available for <span id="timer-mmss">--:--</span></p>
+        </div>
+      </div>
+            
+      <div class="p-6">
+        <div class="flex mb-4 border-b border-gray-200">
+          <div class="sheet-tab active" data-sheet="summary">Summary Results</div>
+          <div class="sheet-tab" data-sheet="detailed">Detailed Results</div>
+        </div>
+                
+        <div id="summarySheet" class="overflow-x-auto">
+          <div class="h-scroll mb-2" id="summaryScroll"><div></div></div>
+          <table id="summaryTable">
+            <thead>
+              <tr>
+                {% for col in columns %}
+                  <th class="px-3 py-2 small">{{ col }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr>
+                  {% for col in columns %}
+                    <td class="px-3 py-2 small">{{ row.get(col, '') }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+                
+        <div id="detailedSheet" class="overflow-x-auto hidden mt-4 transition-opacity duration-300 opacity-0">
+          <div class="h-scroll mb-2" id="detailedScroll"><div></div></div>
+          <!-- If analysis data provided, show grade distribution table -->
+          {% if analysis_columns and analysis_rows %}
+            <table id="analysisTable">
+              <thead>
+                <tr>
+                  {% for col in analysis_columns %}
+                    <th class="px-3 py-2 small">{{ col }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in analysis_rows %}
+                  <tr>
+                    {% for col in analysis_columns %}
+                      <td class="px-3 py-2 small">{{ row.get(col, '') }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <table id="detailedTable">
+              <thead>
+                <tr>
+                  {% for col in columns %}
+                    <th class="px-3 py-2 small">{{ col }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                  <tr>
+                    {% for col in columns %}
+                      <td class="px-3 py-2 small">{{ row.get(col, '') }}</td>
+                    {% endfor %}
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+    
+  <script>
+    feather.replace();
+    // Tab switching with smooth fade
+    document.querySelectorAll('.sheet-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const summary = document.getElementById('summarySheet');
+        const detailed = document.getElementById('detailedSheet');
+        // hide both
+        summary.classList.add('hidden');
+        detailed.classList.add('hidden');
+        detailed.style.opacity = 0;
+        if (tab.dataset.sheet === 'summary') {
+          summary.classList.remove('hidden');
+        } else {
+          // show detailed then fade in
+          detailed.classList.remove('hidden');
+          setTimeout(() => { detailed.style.opacity = 1; }, 20);
+        }
+      });
+    });
+
+    // Download functionality: prefer server-provided Excel (contains all sheets)
+    document.getElementById('downloadBtn').addEventListener('click', async () => {
+      try{
+        // ask server if a result file is available
+        const res = await fetch('/status');
+        const data = await res.json();
+        if(data.result_file){
+          // navigate to server download which streams the full Excel (summary + Grade_Distribution)
+          window.location = '/download-results';
+          return;
+        }
+      }catch(e){
+        // ignore and fall back
+      }
+
+      // fallback: build in-browser workbook from DOM tables
+      try{
+        const wb = XLSX.utils.book_new();
+        const sumTable = document.getElementById('summaryTable');
+        if(!sumTable){ alert('Summary table not found'); return; }
+        const ws1 = XLSX.utils.table_to_sheet(sumTable);
+        XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+        let detTable = document.getElementById('analysisTable');
+        if(!detTable) detTable = document.getElementById('detailedTable');
+        if(detTable){
+          const ws2 = XLSX.utils.table_to_sheet(detTable);
+          XLSX.utils.book_append_sheet(wb, ws2, 'Detailed');
+        }
+        XLSX.writeFile(wb, 'Results.xlsx');
+      }catch(err){
+        console.error('Download error', err);
+        alert('Unable to generate download: ' + (err && err.message ? err.message : String(err)));
+      }
+    });
+
+    // Horizontal top scrollbar sync
+    function syncScroll(topElem, tableContainer) {
+      const inner = topElem.querySelector('div');
+      function update(){
+        const table = tableContainer.querySelector('table');
+        if(!table) return;
+        inner.style.width = table.scrollWidth + 'px';
+      }
+      update();
+      // scroll linkage
+      topElem.addEventListener('scroll', () => {
+        tableContainer.scrollLeft = topElem.scrollLeft;
+      });
+      tableContainer.addEventListener('scroll', () => {
+        topElem.scrollLeft = tableContainer.scrollLeft;
+      });
+      // update on resize
+      window.addEventListener('resize', update);
+      return update;
+    }
+
+    // initialize scroll sync for both tables
+    const summaryContainer = document.getElementById('summarySheet');
+    const detailedContainer = document.getElementById('detailedSheet');
+    const summaryScroll = document.getElementById('summaryScroll');
+    const detailedScroll = document.getElementById('detailedScroll');
+    const upd1 = syncScroll(summaryScroll, summaryContainer);
+    const upd2 = syncScroll(detailedScroll, detailedContainer);
+    // re-run updates shortly after load to ensure sizes
+    setTimeout(() => { upd1(); upd2(); }, 100);
+  </script>
+  <script>
+    // query /status once to get remaining expiry seconds for download file
+    function formatMMSS(secs){
+      const m = Math.floor(secs/60).toString().padStart(2,'0');
+      const s = Math.floor(secs%60).toString().padStart(2,'0');
+      return `${m}:${s}`;
+    }
+    async function initDownloadTimer(){
+      try{
+        const res = await fetch('/status');
+        const data = await res.json();
+        if(data.result_expires_at){
+          const tm = document.getElementById('download-timer');
+          const label = document.getElementById('timer-mmss');
+          const bar = document.getElementById('expiry-bar');
+          const dlBtn = document.getElementById('downloadBtn');
+          let expiresAt = parseInt(data.result_expires_at, 10);
+          tm.classList.remove('hidden');
+          function tick(){
+            const now = Math.floor(Date.now()/1000);
+            let remaining = Math.max(0, expiresAt - now);
+            label.textContent = formatMMSS(remaining);
+            const ttl = 20*60;
+            const pct = Math.max(0, Math.min(100, Math.round((remaining/ttl)*100)));
+            bar.style.width = pct + '%';
+            if(pct > 50) bar.style.background = '#10b981'; else if(pct > 20) bar.style.background = '#f59e0b'; else bar.style.background = '#ef4444';
+            if(remaining <= 0){
+              tm.textContent = 'The file should be removed shortly.';
+              dlBtn.classList.add('hidden');
+              clearInterval(window._resultsTimerInterval);
+            }
+          }
+          tick();
+          window._resultsTimerInterval = setInterval(tick, 1000);
+          // re-check availability every 10s
+          window._resultsRefreshInterval = setInterval(async ()=>{
+            try{
+              const r = await fetch('/status');
+              const j = await r.json();
+              if(!j.result_file){
+                dlBtn.classList.add('hidden');
+                tm.classList.add('hidden');
+                clearInterval(window._resultsRefreshInterval);
+              }
+            }catch(e){}
+          }, 10000);
+        }
+      }catch(e){/* ignore */}
+    }
+    initDownloadTimer();
+  </script>
+</body>
+</html>

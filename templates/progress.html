@@ -1,0 +1,193 @@
+<!doctype html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Processing Results</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #f8fafc;
+    }
+    .progress-bar {
+      height: 8px;
+      border-radius: 4px;
+      background-color: #e2e8f0;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background-color: #4f46e5;
+      transition: width 0.3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+  <div class="w-full max-w-2xl mx-4">
+    <div class="bg-white rounded-xl shadow-xl overflow-hidden">
+      <div class="bg-indigo-600 py-4 px-6">
+        <h1 class="text-2xl font-bold text-white">Processing Results</h1>
+        <p class="text-indigo-100">Your file is being processed</p>
+      </div>
+            
+      <div class="p-6 space-y-6">
+        <div class="text-center py-4">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-100 flex items-center justify-center">
+            <i data-feather="loader" id="loaderIcon" class="w-8 h-8 text-indigo-600 animate-spin"></i>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-800">Processing Student Data</h2>
+          <p class="text-gray-600 mt-2" id="progress-text">Progress: 0/0 - Current: N/A</p>
+                    
+          <div class="progress-bar mt-4">
+            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+                
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+            <div class="flex items-center">
+              <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                <i data-feather="check" class="w-5 h-5 text-green-600"></i>
+              </div>
+              <div>
+                <p class="text-sm text-gray-500">Successfully Processed</p>
+                <p class="text-xl font-bold text-green-600" id="success-count">0</p>
+              </div>
+            </div>
+          </div>
+                    
+          <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+            <div class="flex items-center">
+              <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mr-3">
+                <i data-feather="x" class="w-5 h-5 text-red-600"></i>
+              </div>
+              <div>
+                <p class="text-sm text-gray-500">Failed to Process</p>
+                <p class="text-xl font-bold text-red-600" id="failed-count">0</p>
+              </div>
+            </div>
+          </div>
+        </div>
+                
+        <div class="flex justify-between pt-4">
+          <a id="detailed-link" href="/detailed" class="px-6 py-2 bg-white border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors flex items-center hidden">
+            <i data-feather="bar-chart-2" class="w-4 h-4 mr-2"></i>
+            Detailed Analysis
+          </a>
+                    
+          <a id="download-link" href="#" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center hidden">
+            <i data-feather="download" class="w-4 h-4 mr-2"></i>
+            Download Now
+          </a>
+        </div>
+        <div class="mt-2">
+          <div id="download-timer" class="hidden">
+            <div class="w-full bg-gray-200 rounded h-2 overflow-hidden mb-1" style="height:8px">
+              <div id="expiry-bar" style="width:100%; height:100%; background:#4f46e5; transition: width 1s linear, background 0.5s"></div>
+            </div>
+            <p id="download-timer-text" class="text-sm text-gray-500">Available for <span id="timer-mmss">--:--</span></p>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+    
+  <script>
+    feather.replace();
+        
+    async function fetchStatus(){
+      const res = await fetch('/status');
+      const data = await res.json();
+      const total = data.total || 0;
+      const current = data.current || 0;
+      document.getElementById('progress-text').textContent = `Progress: ${current}/${total} - Current: ${data.current_student || 'N/A'}`;
+      const percent = total ? Math.round((current / total) * 100) : 0;
+      document.getElementById('progress-fill').style.width = percent + '%';
+      document.getElementById('success-count').textContent = data.successful;
+      document.getElementById('failed-count').textContent = data.failed;
+
+      // show download/detailed when done
+      if(!data.running && total > 0 && current === total){
+        document.getElementById('detailed-link').classList.remove('hidden');
+          if(data.result_file){
+          const dl = document.getElementById('download-link');
+          dl.href = '/download-results';
+          dl.classList.remove('hidden');
+          // show timer if server provided expiry
+            if(data.result_expires_at){
+              startExpiryTimer(data.result_expires_at, 'expiry-bar', 'timer-mmss', dl);
+              // set an interval to re-check availability every 10s and hide button if gone
+              try{ window.clearInterval(window._expiryRefreshInterval); }catch(e){}
+              window._expiryRefreshInterval = window.setInterval(async ()=>{
+                try{
+                  const r = await fetch('/status');
+                  const j = await r.json();
+                  if(!j.result_file){
+                    dl.classList.add('hidden');
+                    document.getElementById('download-timer').classList.add('hidden');
+                    clearInterval(window._expiryRefreshInterval);
+                  }
+                }catch(e){}
+              }, 10000);
+            }
+        }
+        // stop polling and show completion icon
+        document.getElementById('loaderIcon').classList.remove('animate-spin');
+        document.getElementById('loaderIcon').outerHTML = feather.icons['check-circle'].toSvg({class: 'w-8 h-8 text-green-500'});
+      } else {
+        setTimeout(fetchStatus, 800);
+      }
+    }
+    // helper to format mm:ss
+    function formatMMSS(secs){
+      const m = Math.floor(secs/60).toString().padStart(2,'0');
+      const s = Math.floor(secs%60).toString().padStart(2,'0');
+      return `${m}:${s}`;
+    }
+
+    // start an expiry timer: expiresAt is epoch seconds
+    function startExpiryTimer(expiresAt, barId, labelId, dlButton){
+      const bar = document.getElementById(barId);
+      const label = document.getElementById(labelId);
+      const container = document.getElementById('download-timer');
+      container.classList.remove('hidden');
+      if(!expiresAt) return;
+      try{ window.clearInterval(window._expiryTimerInterval); }catch(e){}
+      function tick(){
+        const now = Math.floor(Date.now()/1000);
+        let remaining = Math.max(0, expiresAt - now);
+        // update label
+        label.textContent = formatMMSS(remaining);
+        // update bar width
+        // assume original ttl is RESULT_TTL_SECONDS (20*60)
+        const ttl = 20*60;
+        const pct = Math.max(0, Math.min(100, Math.round((remaining/ttl)*100)));
+        bar.style.width = pct + '%';
+        // color change: green (>50%), amber (20-50), red (<20)
+        if(pct > 50) bar.style.background = '#10b981'; else if(pct > 20) bar.style.background = '#f59e0b'; else bar.style.background = '#ef4444';
+        if(remaining <= 0){
+          label.textContent = '00:00';
+          container.textContent = 'The file should be removed shortly.';
+          if(dlButton) dlButton.classList.add('hidden');
+          clearInterval(window._expiryTimerInterval);
+        }
+      }
+      tick();
+      window._expiryTimerInterval = setInterval(tick, 1000);
+    }
+    window.onload = fetchStatus;
+  </script>
+</body>
+</html>
+  <div id="counts"></div>
+  <div id="failed"></div>
+  <div id="download"></div>
+  <div id="detailed"></div>
+</body>
+</html>
